@@ -1,155 +1,60 @@
 ---
 title: "Alignment Synthesis"
-description: "Review evidence-backed personal-agent guidance without changing ongoing conversations"
+description: "Evidence-conditioned personal-agent reflection with reviewed startup guidance"
 ---
 
 # Alignment synthesis
 
-Alignment synthesis is a small, optional personal-agent prompt layer. It distills
-reviewed successes and corrections into five bounded principles: compress wording
-without losing substance, distinguish sharing from tasks, protect attention,
-minimize disclosure, and carry supported corrections forward. It is separate from
-memory facts, tasks, deadlines, skills, and permissions.
+The nightly question is **what have these interactions taught me about being a better agent for this user?** It complements factual memory, skills and repair audits. It interprets successes, corrections and uncertainty into scoped patterns, registers, tensions, attention guidance, continuity and watchouts. It is not a factual backlog or permission store.
 
-The default is **shadow**: the explicit generation command creates a reviewable
-artifact but never injects it. Nothing scans your conversations, memories, files,
-or external services automatically. Generation is deterministic and offline; it
-selects catalog principles from your annotated evidence, rather than asking a
-model to invent preferences. There is no new model tool, cron job, or provider call.
+Default operation is **shadow**. Model generation never enables injection or changes scheduling. Only explicitly approved versions selected in configuration enter new conversations. Existing conversations retain their pinned presence or absence through rebuild, compression and resume.
 
-## Generate and review
+## Nightly workflow (install later)
 
-Run from an activated Hermes checkout. Artifacts default to the active profile's
-`alignment/` directory, resolved through `get_hermes_home()`. An explicit
-`--store DIRECTORY` before the subcommand uses a separate review sandbox.
-
-```bash
-python -m agent.alignment_synthesis catalog
-python -m agent.alignment_synthesis template > reflection.json
-# Edit reflection.json: replace the synthetic example with authorized evidence.
-python -m agent.alignment_synthesis generate --input reflection.json
-python -m agent.alignment_synthesis review VERSION
-python -m agent.alignment_synthesis validate VERSION
-python -m agent.alignment_synthesis approve VERSION --confirm-reviewed
-```
-
-`VERSION` is the full digest printed by `generate`. Review shows the compact prompt,
-all source excerpts and reflections, and the parent diff. Approval records review
-of that exact version; it does not enable injection or change configuration.
-Review output contains the evidence you supplied, so choose where you display or
-save it. Keep real evidence and generated artifacts out of source control.
-
-Each reflection has an immutable `id`, a `rule` from `catalog`, an `outcome`, an
-`effect`, a short `note`, and one or more exact `evidence` quotes with original
-`ref` values. Sources contain only `ref`, `role`, and `content`. Use durable source
-references, not a summary's identifier or an invented array position.
-
-| Outcome | Effect | Evidence requirement |
-| --- | --- | --- |
-| `success` | `adopt` | Explicit user feedback supporting the principle |
-| `correction` | `adopt` or `retire` | Explicit user correction supporting the change |
-| `ambiguous` | `observe` | Original evidence of the uncertain outcome; never changes guidance |
-
-An assistant's claim that something worked and the user's silence are not success
-evidence. When feedback is missing, record the relevant assistant action as
-`ambiguous` with `observe`. Do not invent a user response. At approval, verify that
-the original source is authentic, the quote supports the interpretation, and its
-scope is appropriate. Validation checks structure, bounds, role, and exact quote
-matches **within the supplied evidence**; it cannot verify truth or semantic
-support, and does not fetch references.
-
-### Reuse existing memory evidence
-
-If you already have an authorized direct-message export, `prepare` reuses the
-memory checkpoint's direct-message filter. It excludes system/tool rows,
-`_compressed_summary` rows, and assistant tool-call wrappers without prose. It
-retains original durable `_row_id` references and rejects missing ids rather than
-inventing them. It does not open the session database or read memory files.
+From an activated checkout, supply a bounded export with authorized original direct conversation evidence:
 
 ```json
-{
-  "session_id": "example",
-  "messages": [
-    {"_row_id": 17, "role": "user", "content": "Keep the detail, but use fewer words."}
-  ]
-}
+{"schema":1,"window":"example-night","provenance":"synthetic labelled export","sources":[{"ref":"export:example:original-17","role":"user","content":"That concise answer kept the tradeoffs. Keep doing that."}]}
 ```
 
-```bash
-python -m agent.alignment_synthesis prepare --input authorized-export.json > reflection.json
-# Add reflections; prepare intentionally makes no interpretation or approval.
-python -m agent.alignment_synthesis generate --input reflection.json
+`ref` identifies the original message in its source, not an invented database row. Label supplied conversation excerpts as supplied, not DB-authenticated. Never export private/work material without explicit scope and permission. No DB collector or automatic global scan is included. Sources are user/assistant prose, not system/tool instructions or compressed summaries. The existing `prepare` adapter can filter a durable-row-ID session export; use its `sources` in the explicit window document. Exports and receipts stay out of source control.
+
+```sh
+python -m agent.alignment_synthesis --store REVIEW_DIR nightly --input WINDOW_EXPORT.json
+python -m agent.alignment_synthesis --store REVIEW_DIR review VERSION
+python -m agent.alignment_synthesis --store REVIEW_DIR diff OLD_VERSION VERSION
+python -m agent.alignment_synthesis --store REVIEW_DIR approve VERSION --confirm-reviewed
 ```
 
-Exports must preserve summary metadata. Text-only exports without durable ids are
-not supported by this adapter; curated evidence may instead use the template's
-source schema with genuine original references.
+`nightly` calls the actual Hermes auxiliary router (`call_llm(task="alignment")`), following the owning profile's `auxiliary.alignment` provider/model/reasoning settings and existing credential routing. Configure a route later using the ordinary Hermes settings interface; do not put credentials in YAML. Provider fees and outbound transfer to the configured model apply. The source payload is data, never worker instructions. Generation is schema-validated JSON, not a fixed five-rule selection.
 
-## Opt in for new conversations
+After separate scheduling authorization, invoke this same command from a scheduler with an explicit per-profile `HERMES_HOME`, checkout/interpreter and prepared export path. Schedule export preparation separately with an authorized source scope. No cron is installed by this PR. Repeating an identical content-addressed window returns its prior version without another model call. Changed exports create distinct windows. This independent ledger never consumes canonical memory acknowledgment records. Failed validation/model calls do not advance a checkpoint or active selection. Prior versions remain readable.
 
-After review, select the approved version through the ordinary profile settings:
+## Interpretation and review
 
-```bash
+Schema 2 reflections carry original exact citations, outcome (`success`, `correction`, `ambiguous`), kind (`explicit_preference`, `inference`), dimension, scope and expressive guidance. Uncertain outcomes only support qualified inference; silence is not approval. Quote matching checks provenance consistency, not authenticity or semantic entailment. Human review must check those separately and reject unsafe or unsupported guidance before approval.
+
+The compact rendered section contains qualified interpretation rather than raw quotes or references. It explicitly yields to current instructions, corrections and safety; it grants no permission. A local model can still produce an unsafe interpretation: bounds and advisory wording are not semantic enforcement. Review is load-bearing.
+
+Artifacts retain evidence/reflections and full successful model prompt/output receipts under `versions/`, `runs/`, `windows/`, and `approved/`. Version diffs include source changes. The prompt is at most 1,800 characters; input is at most 256,000 bytes, 100 sources of at most 8,000 characters, and eight expressive reflections with four citations each. Overflow is rejected. Window snapshots are independent bounded roots rather than an unbounded cumulative history; prior versions remain retained for comparison. The legacy deterministic schema-1 catalog remains available for manually annotated principles, separately from expressive synthesis.
+
+## Measured response evaluation
+
+Predeclare held-out criteria for scope, depth/register, continuity, attention and permission. Use the full existing personal-agent baseline, not a weakened persona. Run actual same-route calls with and without the generated section:
+
+```sh
+python -m agent.alignment_synthesis --store REVIEW_DIR evaluate VERSION --baseline FULL_BASELINE.txt --cases HELDOUT_CASES.json > paired-receipts.json
+```
+
+Cases are `[{"name":"scenario","messages":[{"role":"user","content":"held-out request"}]}]`; direct assistant history is supported. Receipts preserve both full message sets and responses. Deterministic tests prove routing and storage contracts, not attunement. Read actual responses against the predeclared criteria. Improvements in isolated calls do not prove production/user-subjective improvement; shadow mode is not deployment. Some comparisons may be ties or regressions.
+
+## Activate only after separate review and authorization
+
+```sh
 hermes config set alignment_synthesis.version VERSION
 hermes config set alignment_synthesis.mode active
 ```
 
-Equivalent `config.yaml`:
+Default profile-scoped settings are `mode: shadow`, `version: ""`. Active injection requires an approved valid exact version; missing/invalid versions fail closed. New sessions adopt changed selection; ongoing and resumed sessions retain their pinned layer. Roll back by selecting an older approved version for a new conversation.
 
-```yaml
-alignment_synthesis:
-  mode: shadow  # shadow (default), off, or active
-  version: ""  # Full reviewed digest; required for active injection
-```
-
-Only `active` with a valid snapshot and review receipt injects. `shadow`, `off`,
-unknown modes, and unreviewed/missing/invalid artifacts inject nothing. Settings
-and artifacts are scoped to the owning profile, including multiplexed agents.
-The prompt contains fixed catalog prose and a version marker, never source
-excerpts, source references, reflection notes, personal facts, or arbitrary
-generated instructions.
-
-The selection is frozen for the conversation, including compression, process
-resume, and model changes. A legacy conversation without this layer keeps that
-absence. Use a new conversation (`/new`) to adopt a changed selection; `/resume`
-uses that session's original selection. Disabling or deleting artifacts also only
-affects new conversations. Current requests and new supported corrections still
-take precedence over the old advisory layer immediately.
-
-## Corrections, versions, and bounds
-
-Append new evidence/reflection ids and generate against the selected parent:
-
-```bash
-python -m agent.alignment_synthesis generate --input correction.json --parent OLD_VERSION
-python -m agent.alignment_synthesis diff OLD_VERSION NEW_VERSION
-python -m agent.alignment_synthesis review NEW_VERSION
-python -m agent.alignment_synthesis approve NEW_VERSION --confirm-reviewed
-hermes config set alignment_synthesis.version NEW_VERSION
-```
-
-Supply the source rows quoted by the new reflections. Parent evidence is retained;
-existing ids/references cannot be rewritten. Reflections are evaluated in append
-order, so a later supported correction can retire a previously adopted principle.
-Ambiguity never retires or adopts one. The new version requires its own review.
-Diffs include evidence-only changes even when the prompt is identical. To roll
-back, select an earlier approved version for a new conversation.
-
-Snapshots are content-addressed JSON under `alignment/versions/`; review receipts
-live under `alignment/approved/`. Publication is atomic and does not overwrite a
-different artifact. Validation rejects tampering, duplicate JSON keys, unknown
-fields/rules, and unsupported schema versions. Digests detect corruption, not a
-malicious writer with access to the same account; this is not an OS security boundary.
-
-The policy body is capped at 1,800 characters, plus a small version frame. Evidence
-is capped at 256,000 serialized bytes, 100 sources (8,000 characters each), and
-100 reflections. A reflection permits eight quotes (1,000 characters each) and a
-500-character note. JSON nesting is limited to 12 levels. Overflow is rejected,
-never silently truncated. There is no automatic eviction or background
-accumulation. At the evidence limit,
-review a new bounded root bundle explicitly and retain prior snapshots for audit.
-
-The catalog deliberately cannot encode arbitrary new preferences. Task-specific
-procedures belong in skills; facts, tasks, and deadlines stay in their existing
-stores. This feature supplies advisory language, not enforcement: it cannot grant
-permission, override safety, or guarantee a model will follow a preference.
+Content addressing detects corruption, not malicious same-account writers. Generated prose is advisory, not enforcement. No live configuration, deployment, merge or scheduling is performed by this workflow.

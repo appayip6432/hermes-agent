@@ -76,6 +76,9 @@ def main(argv=None):
     sub.add_parser("catalog", help="List supported bounded principles")
     prep = sub.add_parser("prepare", help="Convert an explicitly supplied direct-message export into evidence")
     prep.add_argument("--input", type=Path, required=True)
+    from agent.alignment_reflection import run_window
+    nightly = sub.add_parser("nightly", help="Reflect via configured auxiliary.alignment routing on an explicit bounded export window; shadow only")
+    nightly.add_argument("--input", type=Path, required=True)
     generate = sub.add_parser("generate", help="Generate a shadow snapshot; never inject")
     generate.add_argument("--input", type=Path, required=True)
     generate.add_argument("--parent", help="Extend this version without rewriting its evidence")
@@ -84,6 +87,10 @@ def main(argv=None):
         child.add_argument("version")
         if command == "approve":
             child.add_argument("--confirm-reviewed", action="store_true")
+    evaluate = sub.add_parser("evaluate", help="Paired real routed response receipts against an explicitly supplied full baseline")
+    evaluate.add_argument("--baseline", type=Path, required=True)
+    evaluate.add_argument("--cases", type=Path, required=True)
+    evaluate.add_argument("version")
     diff = sub.add_parser("diff")
     diff.add_argument("old")
     diff.add_argument("new")
@@ -91,8 +98,11 @@ def main(argv=None):
     if args.store is None:
         from hermes_constants import get_hermes_home
         args.store = get_hermes_home() / "alignment"
+    from agent.alignment_reflection import evaluate_pairs
     handlers = {
+        "evaluate": lambda a: evaluate_pairs(a.baseline.read_text(encoding="utf-8-sig"), load_snapshot(a.store, a.version)["prompt"], read_json(a.cases)),
         "template": lambda _: template(), "catalog": lambda _: RULES,
+        "nightly": lambda a: run_window(a.store, read_json(a.input)),
         "prepare": lambda a: prepare(read_json(a.input)), "generate": _generate,
         "review": _review, "approve": _approve,
         "validate": lambda a: {"valid": load_snapshot(a.store, a.version)["version"]},

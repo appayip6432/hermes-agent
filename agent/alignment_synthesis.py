@@ -97,6 +97,9 @@ def synthesize(bundle):
     Exact quotes establish provenance, not semantic entailment. Human review must
     verify that success is explicit feedback and corrections support the selected rule.
     """
+    if isinstance(bundle, dict) and type(bundle.get("schema")) is int and bundle["schema"] == 2:
+        from agent.alignment_reflection import synthesize_expressive
+        return synthesize_expressive(bundle)
     _shape(bundle, ("schema", "sources", "reflections"))
     if type(bundle["schema"]) is not int or bundle["schema"] != 1:
         raise ValueError("Unsupported alignment schema")
