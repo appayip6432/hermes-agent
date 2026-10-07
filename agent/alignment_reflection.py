@@ -8,7 +8,7 @@ from agent.alignment_synthesis import AUTHORITY, MAX_INPUT_BYTES, MAX_PROMPT_CHA
 
 
 def synthesize_expressive(bundle):
-    _shape(bundle, ("schema", "sources", "reflections", "provenance"))
+    _shape(bundle, ("schema", "sources", "reflections", "provenance"), ("revisions",))
     _text(bundle["provenance"], 300)
     if len(json.dumps(bundle, ensure_ascii=True).encode()) > MAX_INPUT_BYTES:
         raise ValueError("Alignment evidence exceeds budget")
@@ -44,6 +44,8 @@ def synthesize_expressive(bundle):
         qualifier = "Tentative inference, not established preference" if row["kind"] == "inference" else "explicit_preference"
         lines.append(f"- {row['dimension']} ({qualifier}; {row['outcome']}; scope: {scope}): {guidance}")
     prompt = AUTHORITY + "\n" + "\n".join(lines)
+    from agent.alignment_rolling import validate_revisions
+    validate_revisions(bundle)
     if len(prompt) > MAX_PROMPT_CHARS:
         raise ValueError("Alignment prompt exceeds budget")
     return {"schema": 2, "rules": [], "prompt": prompt, "evidence": copy.deepcopy(bundle)}
@@ -75,36 +77,17 @@ def routed_text(messages):
 
 
 def run_window(store, document, *, model=None):
-    """Process one explicit export window, idempotently; failure never advances a checkpoint."""
-    import hashlib
-    from pathlib import Path
-    from agent.alignment_store import _canonical, _publish, load_snapshot, read_json, save_snapshot
+    """Process an explicit window against the last successful shadow parent."""
+    from agent.alignment_rolling import process_window
     _shape(document, ("schema", "window", "provenance", "sources"))
     if type(document["schema"]) is not int or document["schema"] != 1:
         raise ValueError("Unsupported export schema")
     _text(document["window"], 100)
     _text(document["provenance"], 300)
     _sources(document["sources"])
-    if len(_canonical(document)) > MAX_INPUT_BYTES:
+    if len(json.dumps(document, ensure_ascii=True).encode()) > MAX_INPUT_BYTES:
         raise ValueError("Alignment evidence exceeds budget")
-    key = hashlib.sha256(_canonical(document)).hexdigest()
-    checkpoint = Path(store) / "windows" / f"{key}.json"
-    if checkpoint.exists():
-        return load_snapshot(store, read_json(checkpoint)["version"])
-    messages = [{"role": "system", "content": REFLECTION_PROMPT},
-                {"role": "user", "content": json.dumps(document, ensure_ascii=True)}]
-    raw = (model or routed_text)(messages)
-    _text(raw, 12000)
-    from agent.alignment_store import _unique_keys
-    response = json.loads(raw, object_pairs_hook=_unique_keys)
-    _shape(response, ("reflections",))
-    bundle = {"schema": 2, "sources": document["sources"], "provenance": document["provenance"],
-              "reflections": response["reflections"]}
-    snapshot = save_snapshot(store, bundle)
-    _publish(Path(store) / "runs" / f"{key}.json", {"document": document, "messages": messages,
-              "response": raw, "version": snapshot["version"]})
-    _publish(checkpoint, {"schema": 1, "window": document["window"], "version": snapshot["version"]})
-    return snapshot
+    return process_window(store, document, model=model or routed_text)
 
 
 def evaluate_pairs(baseline, synthesis, cases, *, model=None):

@@ -118,6 +118,23 @@ def test_real_agent_build_uses_reviewed_alignment(setup):
     assert instance._build_system_prompt() == first
 
 
+def test_reviewed_expressive_guidance_survives_startup_and_resume(setup):
+    from agent.alignment_reflection import run_window
+    from tests.agent.test_alignment_rolling import document, lesson, model
+
+    home, _ = setup
+    snapshot = run_window(home / "alignment", document("expressive"), model=model([lesson("expressive")]))
+    configure(home, snapshot["version"])
+    assert snapshot["prompt"] not in build_system_prompt_parts(agent())["stable"]
+    approve(home / "alignment", snapshot["version"])
+    first = build_system_prompt_parts(agent())["stable"]
+    assert snapshot["prompt"] in first
+    configure(home, snapshot["version"], "off")
+    resumed = agent(_cached_system_prompt=first)
+    invalidate_system_prompt(resumed)
+    assert snapshot["prompt"] in build_system_prompt_parts(resumed)["stable"]
+
+
 def test_reused_agent_new_session_reloads_but_resume_uses_durable_original(setup):
     from hermes_state import SessionDB
 

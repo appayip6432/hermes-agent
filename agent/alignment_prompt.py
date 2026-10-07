@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 import re
 
 from agent.alignment_store import is_approved, load_snapshot
-from agent.alignment_synthesis import RULES, render_prompt
+from agent.alignment_synthesis import AUTHORITY, RULES, render_prompt
 
 logger = logging.getLogger(__name__)
 _FRAME = re.compile(
     r"^<!-- hermes-alignment-v1 ([0-9a-f]{64}) ([a-z,]*) -->\n"
     r"([\s\S]{0,1800}?)\n<!-- /hermes-alignment-v1 -->$", re.MULTILINE,
 )
+_EXPRESSIVE_FRAME = re.compile(
+    r"^<!-- hermes-alignment-v2 ([0-9a-f]{64}) ([0-9a-f]{64}) -->\n"
+    r"([\s\S]{0,1800}?)\n<!-- /hermes-alignment-v2 -->$", re.MULTILINE,
+)
+
+
+def _expressive_frame(version, prompt):
+    digest = hashlib.sha256(prompt.encode()).hexdigest()
+    return f"<!-- hermes-alignment-v2 {version} {digest} -->\n{prompt}\n<!-- /hermes-alignment-v2 -->"
 
 
 def _frame(version, rules):
@@ -21,8 +31,17 @@ def _frame(version, rules):
 
 
 def _restore(prompt):
-    """Recover only canonical catalog prose, without touching current config/artifacts."""
+    """Restore pinned, integrity-checked prose without reading mutable live artifacts."""
     matches = list(_FRAME.finditer(prompt))
+    expressive = list(_EXPRESSIVE_FRAME.finditer(prompt))
+    if expressive:
+        if len(expressive) != 1 or matches:
+            return ""
+        match = expressive[0]
+        if not match[3].startswith(AUTHORITY + "\n"):
+            return ""
+        canonical = _expressive_frame(match[1], match[3])
+        return canonical if match[0] == canonical else ""
     if len(matches) != 1:
         return ""
     match = matches[0]
@@ -50,6 +69,8 @@ def _startup(home):
         logger.warning("Alignment synthesis omitted: selected version has not been reviewed")
         return ""
     snapshot = load_snapshot(store, version)
+    if snapshot["schema"] == 2:
+        return _expressive_frame(version, snapshot["prompt"])
     return _frame(version, snapshot["rules"])
 
 

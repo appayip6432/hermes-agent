@@ -91,7 +91,11 @@ def save_snapshot(store, bundle, *, parent=None):
     """Generate a shadow snapshot; a parent preserves all earlier evidence and corrections."""
     if parent is not None:
         previous = load_snapshot(store, parent)
-        bundle = _extend(previous["evidence"], bundle)
+        if bundle.get("schema") == 2:
+            from agent.alignment_rolling import extend_snapshot
+            bundle = extend_snapshot(store, previous, bundle)
+        else:
+            bundle = _extend(previous["evidence"], bundle)
     result = dict(synthesize(bundle), parent=parent)
     result["version"] = hashlib.sha256(_canonical(result)).hexdigest()
     _publish(Path(store) / "versions" / f"{result['version']}.json", result)
