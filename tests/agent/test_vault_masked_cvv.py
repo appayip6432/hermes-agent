@@ -102,3 +102,38 @@ def test_exact_checkout_autocomplete_retains_precedence():
     target = classify_checkout_control(control)
     assert target is not None
     assert (target.token, target.score) == ("cc-csc", 100)
+
+
+@pytest.mark.parametrize("identifier", ["totpPin", "otpCode", "totpToken"])
+@pytest.mark.parametrize("name_format", ["{}", "code {}", "{} code"])
+def test_structured_otp_security_code_is_not_a_checkout_target(identifier, name_format):
+    control = LoginControl("", 0, 0, "Security code", name_format.format(identifier), "password")
+    otp_targets = classify_otp_controls([control])
+    assert len(otp_targets) == 1
+    assert otp_targets[0].control == control
+    assert otp_targets[0].token == "one-time-code"
+    assert classify_checkout_control(control) is None
+
+
+@pytest.mark.parametrize("identifier", ["totpPin", "otpCode", "totpToken"])
+@pytest.mark.parametrize("name_format", ["{}", "code {}", "{} code"])
+def test_checkout_does_not_fill_cvv_into_structured_otp(identifier, name_format):
+    controls = [
+        LoginControl("", 0, 0, "Security code", name_format.format(identifier), "password"),
+        LoginControl("", 0, 1, "Security code", "cvv", "password"),
+    ]
+    targets = [target for control in controls if (target := classify_checkout_control(control))]
+    assert select_checkout_fills(targets, {"cvc": "123"}, {"cvc": "cc-csc"}) == [
+        {"index": 1, "token": "cc-csc", "value": "123"}
+    ]
+
+
+@pytest.mark.parametrize("identifier", ["totpPin", "otpCode", "totpToken"])
+@pytest.mark.parametrize("name_format", ["{}", "code {}", "{} code"])
+def test_checkout_autocomplete_overrides_structured_otp_identifier(identifier, name_format):
+    control = LoginControl(
+        "section-payment cc-csc", 0, 2, "Security code", name_format.format(identifier), "password",
+    )
+    target = classify_checkout_control(control)
+    assert target is not None
+    assert (target.token, target.score) == ("cc-csc", 100)

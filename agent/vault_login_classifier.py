@@ -134,6 +134,15 @@ _RE_OTP = re.compile(
 )
 
 
+def _has_structured_otp_identifier(control: LoginControl) -> bool:
+    # Inspection combines name and id with whitespace; only complete identifiers
+    # qualify, so unrelated camelCase card fields do not become OTP targets.
+    return any(
+        identifier.lower() in {"totppin", "otpcode", "totptoken"}
+        for identifier in control.name.split()
+    )
+
+
 def classify_otp_controls(controls: List[LoginControl]) -> List[ClassifiedLoginControl]:
     """The controls that take a second-factor code. ``autocomplete=one-time-code`` is authoritative;
     otherwise a text/tel/number input whose name/label says code/OTP/2FA/verification. Some sites split
@@ -147,13 +156,9 @@ def classify_otp_controls(controls: List[LoginControl]) -> List[ClassifiedLoginC
             continue
         if c.type not in ("text", "tel", "number", "password", ""):
             continue
-        # Inspection combines name and id with whitespace; only complete identifiers
-        # qualify, so unrelated camelCase card fields do not become OTP targets.
-        structured_otp = any(
-            identifier.lower() in {"totppin", "otpcode", "totptoken"}
-            for identifier in c.name.split()
-        )
-        if structured_otp or _RE_OTP.search(_normalize_text(" ".join(p for p in (c.name, c.label) if p))):
+        if _has_structured_otp_identifier(c) or _RE_OTP.search(
+            _normalize_text(" ".join(p for p in (c.name, c.label) if p))
+        ):
             out.append(ClassifiedLoginControl(c, 70, "one-time-code"))
     return out
 
@@ -209,6 +214,7 @@ def classify_checkout_control(control: LoginControl) -> Optional[ClassifiedLogin
     searchable = _normalize_text(" ".join(part for part in (control.name, control.label) if part))
     if control.type == "password" and (
         any(t in LOGIN_AUTOFILL_TOKENS or t in _EXCLUDED_AUTOCOMPLETE for t in tokens)
+        or _has_structured_otp_identifier(control)
         or _RE_MASKED_CVV_AUTH.search(" ".join(
             _RE_CARD_VERIFICATION.sub(" ", _normalize_text(part))
             for part in (control.name, control.label) if part
