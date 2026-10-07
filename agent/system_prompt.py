@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from agent.alignment_prompt import frozen_alignment
 from agent.delegation_context import owned_kanban_task
 from agent.prompt_builder import (
     ASYNC_HANDOFF_GUIDANCE, DEFAULT_AGENT_IDENTITY, EXECUTION_GUIDANCE_MODELS, GOOGLE_MODEL_OPERATIONAL_GUIDANCE,
@@ -625,10 +626,10 @@ def _persisted_workspace_block(prompt: str, key: str) -> Optional[str]:
     return None
 
 
-def _session_prompt(agent: Any) -> Optional[str]:
+def _session_prompt(agent: Any, *, include_cached: bool = True) -> Optional[str]:
     """Prompt bytes this session already sends: the cached copy, else its persisted row."""
     cached = getattr(agent, "_cached_system_prompt", None)
-    if isinstance(cached, str) and cached:
+    if include_cached and isinstance(cached, str) and cached:
         return cached
     db, session_id = getattr(agent, "_session_db", None), getattr(agent, "session_id", None)
     if db is None or not isinstance(session_id, str) or not session_id:
@@ -750,6 +751,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     _help_guidance_slot = len(stable_parts)
     stable_parts.append(HERMES_AGENT_HELP_GUIDANCE_NO_SKILLS)
     stable_parts.extend(_guidance_parts(agent))
+    stable_parts.append(frozen_alignment(agent))
     skills_prompt = _skills_prompt(agent)
     # Skill-pointer variant requires BOTH skill_view AND the hermes-agent skill
     # in the rendered index (pure string check — inherits the index's stability).
@@ -821,6 +823,9 @@ def invalidate_system_prompt(agent: Any) -> None:
     inside plugin-land. The previous bytes are stashed so a plugin whose render RAISES falls back to its
     last good section instead of vanishing (fail-open guard, not a freeze).
     """
+    # Alignment is explicitly startup-only, including after compression. Capture
+    # resumed prompt bytes (or their absence) before discarding the cached prompt.
+    frozen_alignment(agent)
     agent._cached_system_prompt = None
     agent._cached_system_prompt_static = None
     if hasattr(agent, "_plugin_system_prompt_sections_snapshot"):

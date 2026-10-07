@@ -34,6 +34,15 @@ The cached system prompt is assembled as three ordered tiers (see `agent/system_
 
 The final system prompt is then joined as: `stable` → `context` → `volatile`.
 
+Optional [alignment synthesis](../user-guide/features/alignment-synthesis.md) is
+pinned in the stable tier by `agent/alignment_prompt.py`. Only an explicitly
+selected, reviewed version in active mode can enter a new conversation. Its
+catalog prose and version frame are recovered from persisted prompts on resume;
+its presence or absence survives compression. `reset_session_state()` resets the
+pin for an explicit session switch, reading the destination's persisted prompt
+before considering current profile config. Evidence and reflection notes remain
+in separate versioned artifacts and never enter this layer.
+
 This ordering matters for precedence discussions:
 - skills are part of the **stable** tier
 - memory/profile snapshots are part of the **volatile** tier
