@@ -16,7 +16,7 @@ _FRAME = re.compile(
 )
 _EXPRESSIVE_FRAME = re.compile(
     r"^<!-- hermes-alignment-v2 ([0-9a-f]{64}) ([0-9a-f]{64}) -->\n"
-    r"([\s\S]{0,1800}?)\n<!-- /hermes-alignment-v2 -->$", re.MULTILINE,
+    r"([\s\S]{0,6500}?)\n<!-- /hermes-alignment-v2 -->$", re.MULTILINE,
 )
 
 

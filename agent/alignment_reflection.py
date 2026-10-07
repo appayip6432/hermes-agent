@@ -8,7 +8,7 @@ from agent.alignment_synthesis import AUTHORITY, MAX_INPUT_BYTES, MAX_PROMPT_CHA
 
 
 def synthesize_expressive(bundle):
-    _shape(bundle, ("schema", "sources", "reflections", "provenance"), ("revisions",))
+    _shape(bundle, ("schema", "sources", "reflections", "provenance"), ("revisions", "narrative"))
     _text(bundle["provenance"], 300)
     if len(json.dumps(bundle, ensure_ascii=True).encode()) > MAX_INPUT_BYTES:
         raise ValueError("Alignment evidence exceeds budget")
@@ -44,9 +44,12 @@ def synthesize_expressive(bundle):
         qualifier = "Tentative inference, not established preference" if row["kind"] == "inference" else "explicit_preference"
         lines.append(f"- {row['dimension']} ({qualifier}; {row['outcome']}; scope: {scope}): {guidance}")
     prompt = AUTHORITY + "\n" + "\n".join(lines)
+    if "narrative" in bundle:
+        from agent.alignment_narrative import validate_narrative
+        prompt = AUTHORITY + "\n\n" + validate_narrative(bundle["narrative"], sources)
     from agent.alignment_rolling import validate_revisions
     validate_revisions(bundle)
-    if len(prompt) > MAX_PROMPT_CHARS:
+    if len(prompt) > (6500 if "narrative" in bundle else MAX_PROMPT_CHARS):
         raise ValueError("Alignment prompt exceeds budget")
     return {"schema": 2, "rules": [], "prompt": prompt, "evidence": copy.deepcopy(bundle)}
 
@@ -93,7 +96,7 @@ def run_window(store, document, *, model=None):
 def evaluate_pairs(baseline, synthesis, cases, *, model=None):
     """Actual paired calls with identical route/settings; retain complete prompt/output receipts."""
     _text(baseline, 100000)
-    _text(synthesis, MAX_PROMPT_CHARS)
+    _text(synthesis, 6500)
     results = []
     for case in _items(cases, 12):
         _shape(case, ("name", "messages"))

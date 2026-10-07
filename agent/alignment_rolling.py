@@ -22,8 +22,9 @@ To replace an older lesson return optional revisions: [{target: prior reflection
 replacement: new reflection ID, reason: contradiction explained, uncertainty: remaining uncertainty}].
 Replacement must be a correction with fresh user evidence. Preserve still-supported portions
 in replacement guidance, including scoped exceptions. Never retire merely to fit the budget.
-The combined retained and new rendered prompt must fit 1800 characters including the authority
-paragraph and per-entry labels; emit few short entries. No revision is needed for unrelated evidence.
+The legacy checklist rendering remains bounded at 1800 characters. For narrative output,
+retain the audit ledger without rendering its category labels; follow the narrative budget.
+No revision is needed for unrelated evidence.
 """
 
 
@@ -60,7 +61,8 @@ def extend_expressive(previous, delta, *, used_ids=()):
     """Omission never deletes a lesson. Corrections name exactly what they supersede."""
     from agent.alignment_synthesis import synthesize
 
-    synthesize(delta)
+    # New audit rows must use this window; integrated prose may cite retained originals.
+    synthesize({key: value for key, value in delta.items() if key != "narrative"})
     if previous["schema"] != 2 or delta["schema"] != 2:
         raise ValueError("Cannot mix catalog and expressive parents")
     sources = {row["ref"]: row for row in previous["sources"]}
@@ -129,7 +131,8 @@ def _generate(store, document, key, head, prior, model):
     from agent.alignment_reflection import REFLECTION_PROMPT
     from agent.alignment_store import _publish, _unique_keys, save_snapshot
 
-    messages = [{"role": "system", "content": REFLECTION_PROMPT + ROLLING_PROMPT},
+    from agent.alignment_narrative import NARRATIVE_PROMPT
+    messages = [{"role": "system", "content": REFLECTION_PROMPT + ROLLING_PROMPT + NARRATIVE_PROMPT},
                 {"role": "user", "content": json.dumps({"window": document, "prior": prior}, ensure_ascii=True)}]
     attempt = uuid.uuid4().hex
     receipt = {"document": document, "messages": messages, "parent": head["version"]}
@@ -139,7 +142,7 @@ def _generate(store, document, key, head, prior, model):
         receipt["response"] = raw
         _text(raw, 12000)
         response = json.loads(raw, object_pairs_hook=_unique_keys)
-        _shape(response, ("reflections",), ("revisions",))
+        _shape(response, ("reflections",), ("revisions", "narrative"))
         bundle = dict(response, schema=2, sources=document["sources"], provenance=document["provenance"])
         snapshot = save_snapshot(store, bundle, parent=head["version"])
         receipt["version"] = snapshot["version"]
